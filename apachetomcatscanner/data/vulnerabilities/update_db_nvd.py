@@ -296,7 +296,7 @@ def get_cves_from_nvd(year=None):
                 }
                 
                 # Save immediately to avoid losing progress
-                save_path = f"./vulnerabilities/{cves[cve_id]['cve']['year']}/{cve_id}.json"
+                save_path = f"./{cves[cve_id]['cve']['year']}/{cve_id}.json"
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 with open(save_path, "w") as f:
                     f.write(json.dumps(cves[cve_id], indent=4))
@@ -330,9 +330,9 @@ if __name__ == "__main__":
     
     # Load existing CVEs
     CVES = {}
-    if os.path.exists("./vulnerabilities/"):
+    if os.path.exists("./"):
         print("[*] Loading existing CVE database...")
-        for file in glob.glob("./vulnerabilities/*/*.json"):
+        for file in glob.glob("./*/*.json"):
             try:
                 with open(file, "r") as f:
                     data = json.loads(f.read())
