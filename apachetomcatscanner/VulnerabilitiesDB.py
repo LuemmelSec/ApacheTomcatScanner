@@ -23,7 +23,7 @@ class VulnerabilitiesDB(object):
         self.cves = {}
         self.versions_to_cves = {}
         self.auto_update_days = auto_update_days
-        self.metadata_file = os.path.join(os.path.dirname(__file__), "data", "db_metadata.json")
+        self.metadata_file = os.path.join(os.path.dirname(__file__), "data", "vulnerabilities", "db_metadata.json")
         
         # Check if database needs updating (unless disabled)
         if not skip_auto_update and self.should_update_database():
