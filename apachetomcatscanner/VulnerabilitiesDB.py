@@ -28,7 +28,7 @@ class VulnerabilitiesDB(object):
         # Check if database needs updating (unless disabled)
         if not skip_auto_update and self.should_update_database():
             print("[!] CVE database is outdated (last update: %s)" % self.get_last_update_date())
-            print("[*] You can update it by running: python apachetomcatscanner/data/update_db_nvd.py")
+            print("[*] You can update it by running: python apachetomcatscanner/data/vulnerabilities/update_db_nvd.py")
             response = input("[?] Would you like to update now? This may take several minutes. (y/N): ")
             if response.lower() in ['y', 'yes']:
                 self.update_database()
@@ -133,7 +133,7 @@ class VulnerabilitiesDB(object):
     
     def update_database(self):
         """Run the update script to fetch latest CVEs from NVD"""
-        update_script = os.path.join(os.path.dirname(__file__), "data", "update_db_nvd.py")
+        update_script = os.path.join(os.path.dirname(__file__), "data", "vulnerabilities", "update_db_nvd.py")
         
         if not os.path.exists(update_script):
             print("[!] Error: Update script not found at %s" % update_script)
