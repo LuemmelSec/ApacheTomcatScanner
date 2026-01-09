@@ -64,6 +64,24 @@ class VulnerabilitiesDB(object):
                         self.versions_to_cves[version["tag"]] = []
                     self.versions_to_cves[version["tag"]].append(cve_data)
 
+    def normalize_version(self, version_tag):
+        """Normalize version string by removing OS-specific suffixes
+        
+        Args:
+            version_tag: Version string that may contain suffixes like "(Debian)", "(Ubuntu)", etc.
+            
+        Returns:
+            Normalized version string with only the version number
+        """
+        if not version_tag:
+            return version_tag
+        # Remove common OS/distro suffixes in parentheses or after space
+        import re
+        # Remove anything in parentheses or after common separator patterns
+        normalized = re.sub(r'\s*\([^)]+\)\s*$', '', version_tag)
+        normalized = re.sub(r'\s+(debian|ubuntu|redhat|centos|alpine|el\d+).*$', '', normalized, flags=re.IGNORECASE)
+        return normalized.strip()
+
     def get_vulnerabilities_of_version_sorted_by_criticity(
         self, version_tag, colors=False, reverse=False
     ):
@@ -75,6 +93,10 @@ class VulnerabilitiesDB(object):
             "Critical": "\x1b[1;48;2;45;45;45;97m%s\x1b[0m",
         }
         vulnerabilities = []
+        # Normalize version to handle OS-specific suffixes
+        normalized_version = self.normalize_version(version_tag)
+        if normalized_version in self.versions_to_cves.keys():
+            version_tag = normalized_version
         if version_tag in self.versions_to_cves.keys():
             vulnerabilities = self.versions_to_cves[version_tag]
             vulnerabilities = sorted(
@@ -93,12 +115,26 @@ class VulnerabilitiesDB(object):
 
     def get_vulnerabilities_of_version_sorted_by_year(self, version_tag, reverse=False):
         vulnerabilities = []
+        # Normalize version to handle OS-specific suffixes
+        normalized_version = self.normalize_version(version_tag)
+        if normalized_version in self.versions_to_cves.keys():
+            version_tag = normalized_version
         if version_tag in self.versions_to_cves.keys():
             vulnerabilities = self.versions_to_cves[version_tag]
             vulnerabilities = sorted(
                 vulnerabilities, key=lambda cve: cve["cve"]["year"], reverse=reverse
             )
         return vulnerabilities
+    
+    def get_newest_cve_year(self):
+        """Get the newest CVE year from the database"""
+        if not self.cves:
+            return None
+        try:
+            years = [cve_data["cve"]["year"] for cve_data in self.cves.values() if "cve" in cve_data and "year" in cve_data["cve"]]
+            return max(years) if years else None
+        except Exception:
+            return None
     
     def get_last_update_date(self):
         """Get the last update date from metadata file"""

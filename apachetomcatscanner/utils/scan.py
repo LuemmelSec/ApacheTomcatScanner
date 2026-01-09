@@ -59,6 +59,67 @@ def is_tomcat_manager_accessible(url_manager, config):
         return False
 
 
+def get_version_from_server_header(url, config):
+    """
+    Get the version of the Apache Tomcat server from the Server HTTP header.
+
+    Args:
+        url: The URL to check.
+        config: The config object.
+
+    Returns:
+        Tuple of (version, is_tomcat) where:
+        - version: The version string or None if not found
+        - is_tomcat: True if server identifies as Apache Tomcat (even without version)
+    Raises:
+        Exception: If an error occurs while getting the version from the Server header.
+    """
+    version = None
+    is_tomcat = False
+    try:
+        config.debug(f"Checking Server header at URL: {url}")
+        r = requests.get(
+            url,
+            timeout=config.request_timeout,
+            proxies=config.request_proxies,
+            headers=config.request_http_headers,
+            verify=(not (config.request_no_check_certificate)),
+        )
+        
+        # Check Server header
+        server_header = r.headers.get('Server', '')
+        if server_header:
+            config.debug(f"Server header: {server_header}")
+            # Only match "Apache Tomcat" patterns, NOT "Apache-Coyote" 
+            # (Coyote version numbers refer to the connector protocol, not Tomcat version)
+            matched = re.search(r'Apache[- ]Tomcat[/]?([0-9.]+)', server_header, re.IGNORECASE)
+            if matched:
+                version = matched.group(1)
+                is_tomcat = True
+                config.debug(f"Version extracted from Server header: {version}")
+            elif re.search(r'Apache[- ]Tomcat', server_header, re.IGNORECASE):
+                # Server identifies as Tomcat but no version in header
+                is_tomcat = True
+                config.debug("Apache Tomcat found in Server header but no version specified")
+            elif 'coyote' in server_header.lower():
+                config.debug("Apache-Coyote header found, but version cannot be determined from Coyote protocol version")
+        
+        # Also check X-Powered-By header
+        if version is None:
+            powered_by = r.headers.get('X-Powered-By', '')
+            if powered_by:
+                config.debug(f"X-Powered-By header: {powered_by}")
+                matched = re.search(r'(?:Servlet|JSP)[/]?([0-9.]+)', powered_by, re.IGNORECASE)
+                if matched:
+                    servlet_version = matched.group(1)
+                    config.debug(f"Servlet/JSP version from X-Powered-By: {servlet_version}")
+        
+        return version, is_tomcat
+    except Exception as e:
+        config.debug(f"Error in get_version_from_server_header('{url}'): {e}")
+        return None, False
+
+
 def get_version_from_malformed_http_request(url, config):
     """
     Get the version of the Apache Tomcat server from a malformed HTTP request.
@@ -73,6 +134,15 @@ def get_version_from_malformed_http_request(url, config):
         Exception: If an error occurs while getting the version of the Apache Tomcat server from a malformed HTTP request.
     """
     version = None
+    
+    # First, try to get version from Server header (quickest method)
+    header_version, is_tomcat_from_header = get_version_from_server_header(url, config)
+    if header_version is not None:
+        config.debug(f"Version found from Server header: {header_version}")
+        return header_version
+    
+    # If Server header confirms it's Tomcat but no version, continue detection
+    # Otherwise, also try detection methods in case headers are hidden
     url_depth = len(url.split("/")[3:])
     test_urls = [
         ("GET", url + "/{}"),
@@ -121,6 +191,12 @@ def get_version_from_malformed_http_request(url, config):
                     _, _, _version, _, _ = matched.groups()
                     version = _version.decode("utf-8")
                     print("Version using docs")
+        
+        # If we confirmed it's Tomcat from header but couldn't find version, return "Unknown"
+        if version is None and is_tomcat_from_header:
+            config.debug("Tomcat detected from Server header but version unknown")
+            return "Unknown"
+        
         return version
     except Exception as e:
         config.debug(
@@ -170,9 +246,21 @@ def try_credentials(url_manager, config):
 
 
 def process_url(scheme, target, port, url, config, reporter):
-    url = url.rstrip("/")
+    # Preserve trailing slash for proper path handling, but remove multiple trailing slashes
+    original_url = url
+    while url.endswith("//"):
+        url = url[:-1]
+    # If URL had a path and trailing slash, keep it
+    if original_url.endswith("/") and len(url.split("/")) > 3:
+        if not url.endswith("/"):
+            url = url + "/"
+    else:
+        url = url.rstrip("/")
+    
     baseurl = "/".join(url.split("/")[:3])
     url_depth = len(url.split("/")[3:])
+    
+    config.debug(f"Testing URL: {url} (baseurl: {baseurl}, path depth: {url_depth})")
 
     # Generating urls, with bypasses
     possible_manager_urls = [
