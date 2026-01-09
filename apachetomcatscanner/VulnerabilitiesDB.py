@@ -7,6 +7,9 @@
 import glob
 import json
 import os
+import subprocess
+import sys
+from datetime import datetime, timedelta
 
 
 class VulnerabilitiesDB(object):
@@ -14,11 +17,22 @@ class VulnerabilitiesDB(object):
     Documentation for class VulnerabilitiesDB
     """
 
-    def __init__(self, config):
+    def __init__(self, config, auto_update_days=30, skip_auto_update=False):
         super(VulnerabilitiesDB, self).__init__()
         self.config = config
         self.cves = {}
         self.versions_to_cves = {}
+        self.auto_update_days = auto_update_days
+        self.metadata_file = os.path.join(os.path.dirname(__file__), "data", "db_metadata.json")
+        
+        # Check if database needs updating (unless disabled)
+        if not skip_auto_update and self.should_update_database():
+            print("[!] CVE database is outdated (last update: %s)" % self.get_last_update_date())
+            print("[*] You can update it by running: python apachetomcatscanner/data/update_db_nvd.py")
+            response = input("[?] Would you like to update now? This may take several minutes. (y/N): ")
+            if response.lower() in ['y', 'yes']:
+                self.update_database()
+        
         self.load()
 
     def load(self):
@@ -64,7 +78,7 @@ class VulnerabilitiesDB(object):
         if version_tag in self.versions_to_cves.keys():
             vulnerabilities = self.versions_to_cves[version_tag]
             vulnerabilities = sorted(
-                vulnerabilities, key=lambda cve: cve["cvss"]["score"], reverse=reverse
+                vulnerabilities, key=lambda cve: float(cve["cvss"]["score"]) if cve["cvss"]["score"] else 0, reverse=reverse
             )
             if colors:
                 vulnerabilities = [
@@ -85,3 +99,62 @@ class VulnerabilitiesDB(object):
                 vulnerabilities, key=lambda cve: cve["cve"]["year"], reverse=reverse
             )
         return vulnerabilities
+    
+    def get_last_update_date(self):
+        """Get the last update date from metadata file"""
+        try:
+            if os.path.exists(self.metadata_file):
+                with open(self.metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                    return metadata.get('last_update', 'Never')
+        except Exception:
+            pass
+        return 'Never'
+    
+    def should_update_database(self):
+        """Check if database should be updated based on age"""
+        try:
+            if not os.path.exists(self.metadata_file):
+                return True
+            
+            with open(self.metadata_file, 'r') as f:
+                metadata = json.load(f)
+                last_update_str = metadata.get('last_update')
+                
+                if not last_update_str:
+                    return True
+                
+                last_update = datetime.fromisoformat(last_update_str)
+                days_old = (datetime.now() - last_update).days
+                
+                return days_old >= self.auto_update_days
+        except Exception:
+            return True
+    
+    def update_database(self):
+        """Run the update script to fetch latest CVEs from NVD"""
+        update_script = os.path.join(os.path.dirname(__file__), "data", "update_db_nvd.py")
+        
+        if not os.path.exists(update_script):
+            print("[!] Error: Update script not found at %s" % update_script)
+            return False
+        
+        try:
+            print("[*] Starting CVE database update from NVD API...")
+            # Run the update script
+            result = subprocess.run(
+                [sys.executable, update_script],
+                capture_output=False,
+                text=True,
+                cwd=os.path.dirname(update_script)
+            )
+            
+            if result.returncode == 0:
+                print("[+] Database update completed successfully!")
+                return True
+            else:
+                print("[!] Database update failed with return code %d" % result.returncode)
+                return False
+        except Exception as e:
+            print("[!] Error during database update: %s" % str(e))
+            return False
