@@ -55,8 +55,9 @@ def get_apache_releases():
                                 if version not in releases_dates:
                                     releases_dates[version] = []
                                 releases_dates[version].append(release_date_ts)
-                            except:
-                                pass
+                            except (ValueError, UnicodeDecodeError) as e:
+                                # Skip entries with unparsable or malformed dates, but continue processing others.
+                                print(f"   [!] Skipping release with invalid date format: {e}")
         except Exception as e:
             print(f"   [!] Error fetching versions: {e}")
         time.sleep(0.5)
