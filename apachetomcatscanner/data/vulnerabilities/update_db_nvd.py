@@ -338,8 +338,8 @@ if __name__ == "__main__":
                 with open(file, "r") as f:
                     data = json.loads(f.read())
                 CVES[data["cve"]["id"]] = data
-            except:
-                pass
+            except Exception as e:
+                print(f"[!] Warning: Could not load existing CVE file {file}: {e}")
         print(f"[+] Loaded {len(CVES)} existing CVEs")
     
     # Get version information
