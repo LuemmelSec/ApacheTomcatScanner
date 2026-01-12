@@ -286,7 +286,7 @@ def get_cves_from_nvd(year=None):
                         "complexity": "???",
                         "confidentiality": "None",
                         "integrity": "None",
-                        "availablility": "None"
+                        "availability": "None"
                     },
                     "affected_versions": unique_versions,
                     "references": [
