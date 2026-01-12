@@ -210,6 +210,12 @@ def parseArgs():
         help="Show description of found CVEs. (default: False)",
     )
     parser.add_argument(
+        "--no-auto-update",
+        default=False,
+        action="store_true",
+        help="Disable automatic CVE database update check. (default: False)",
+    )
+    parser.add_argument(
         "-T",
         "--threads",
         default=250,
@@ -459,7 +465,7 @@ def main():
             % number_of_tested_credentials
         )
 
-    vulns_db = VulnerabilitiesDB(config=config)
+    vulns_db = VulnerabilitiesDB(config=config, skip_auto_update=options.no_auto_update)
     reporter = Reporter(config=config, vulns_db=vulns_db)
 
     # Parsing targets and ports

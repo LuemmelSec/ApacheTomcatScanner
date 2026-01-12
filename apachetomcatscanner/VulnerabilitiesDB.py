@@ -7,6 +7,9 @@
 import glob
 import json
 import os
+import subprocess
+import sys
+from datetime import datetime
 
 
 class VulnerabilitiesDB(object):
@@ -14,11 +17,22 @@ class VulnerabilitiesDB(object):
     Documentation for class VulnerabilitiesDB
     """
 
-    def __init__(self, config):
+    def __init__(self, config, auto_update_days=30, skip_auto_update=False):
         super(VulnerabilitiesDB, self).__init__()
         self.config = config
         self.cves = {}
         self.versions_to_cves = {}
+        self.auto_update_days = auto_update_days
+        self.metadata_file = os.path.join(os.path.dirname(__file__), "data", "vulnerabilities", "db_metadata.json")
+        
+        # Check if database needs updating (unless disabled)
+        if not skip_auto_update and self.should_update_database():
+            print("[!] CVE database is outdated (last update: %s)" % self.get_last_update_date())
+            print("[*] You can update it by running: python apachetomcatscanner/data/vulnerabilities/update_db_nvd.py")
+            response = input("[?] Would you like to update now? This may take several minutes. (y/N): ")
+            if response.lower() in ['y', 'yes']:
+                self.update_database()
+        
         self.load()
 
     def load(self):
@@ -50,6 +64,24 @@ class VulnerabilitiesDB(object):
                         self.versions_to_cves[version["tag"]] = []
                     self.versions_to_cves[version["tag"]].append(cve_data)
 
+    def normalize_version(self, version_tag):
+        """Normalize version string by removing OS-specific suffixes
+        
+        Args:
+            version_tag: Version string that may contain suffixes like "(Debian)", "(Ubuntu)", etc.
+            
+        Returns:
+            Normalized version string with only the version number
+        """
+        if not version_tag:
+            return version_tag
+        # Remove common OS/distro suffixes in parentheses or after space
+        import re
+        # Remove anything in parentheses or after common separator patterns
+        normalized = re.sub(r'\s*\([^)]+\)\s*$', '', version_tag)
+        normalized = re.sub(r'\s+(debian|ubuntu|redhat|centos|alpine|el\d+).*$', '', normalized, flags=re.IGNORECASE)
+        return normalized.strip()
+
     def get_vulnerabilities_of_version_sorted_by_criticity(
         self, version_tag, colors=False, reverse=False
     ):
@@ -61,10 +93,14 @@ class VulnerabilitiesDB(object):
             "Critical": "\x1b[1;48;2;45;45;45;97m%s\x1b[0m",
         }
         vulnerabilities = []
+        # Normalize version to handle OS-specific suffixes
+        normalized_version = self.normalize_version(version_tag)
+        if normalized_version in self.versions_to_cves.keys():
+            version_tag = normalized_version
         if version_tag in self.versions_to_cves.keys():
             vulnerabilities = self.versions_to_cves[version_tag]
             vulnerabilities = sorted(
-                vulnerabilities, key=lambda cve: cve["cvss"]["score"], reverse=reverse
+                vulnerabilities, key=lambda cve: float(cve["cvss"]["score"]) if cve["cvss"]["score"] else 0, reverse=reverse
             )
             if colors:
                 vulnerabilities = [
@@ -79,9 +115,83 @@ class VulnerabilitiesDB(object):
 
     def get_vulnerabilities_of_version_sorted_by_year(self, version_tag, reverse=False):
         vulnerabilities = []
+        # Normalize version to handle OS-specific suffixes
+        normalized_version = self.normalize_version(version_tag)
+        if normalized_version in self.versions_to_cves.keys():
+            version_tag = normalized_version
         if version_tag in self.versions_to_cves.keys():
             vulnerabilities = self.versions_to_cves[version_tag]
             vulnerabilities = sorted(
                 vulnerabilities, key=lambda cve: cve["cve"]["year"], reverse=reverse
             )
         return vulnerabilities
+    
+    def get_newest_cve_year(self):
+        """Get the newest CVE year from the database"""
+        if not self.cves:
+            return None
+        try:
+            years = [cve_data["cve"]["year"] for cve_data in self.cves.values() if "cve" in cve_data and "year" in cve_data["cve"]]
+            return max(years) if years else None
+        except Exception:
+            return None
+    
+    def get_last_update_date(self):
+        """Get the last update date from metadata file"""
+        try:
+            if os.path.exists(self.metadata_file):
+                with open(self.metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                    return metadata.get('last_update', 'Never')
+        except Exception as e:
+            # Log the error and fall back to reporting no last update date
+            print("[!] Failed to read metadata file %s: %s" % (self.metadata_file, e))
+        return 'Never'
+    
+    def should_update_database(self):
+        """Check if database should be updated based on age"""
+        try:
+            if not os.path.exists(self.metadata_file):
+                return True
+            
+            with open(self.metadata_file, 'r') as f:
+                metadata = json.load(f)
+                last_update_str = metadata.get('last_update')
+                
+                if not last_update_str:
+                    return True
+                
+                last_update = datetime.fromisoformat(last_update_str)
+                days_old = (datetime.now() - last_update).days
+                
+                return days_old >= self.auto_update_days
+        except Exception:
+            return True
+    
+    def update_database(self):
+        """Run the update script to fetch latest CVEs from NVD"""
+        update_script = os.path.join(os.path.dirname(__file__), "data", "vulnerabilities", "update_db_nvd.py")
+        
+        if not os.path.exists(update_script):
+            print("[!] Error: Update script not found at %s" % update_script)
+            return False
+        
+        try:
+            print("[*] Starting CVE database update from NVD API...")
+            # Run the update script
+            result = subprocess.run(
+                [sys.executable, update_script],
+                capture_output=False,
+                text=True,
+                cwd=os.path.dirname(update_script)
+            )
+            
+            if result.returncode == 0:
+                print("[+] Database update completed successfully!")
+                return True
+            else:
+                print("[!] Database update failed with return code %d" % result.returncode)
+                return False
+        except Exception as e:
+            print("[!] Error during database update: %s" % str(e))
+            return False

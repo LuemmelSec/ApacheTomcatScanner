@@ -115,6 +115,41 @@ You can also list the CVEs of each version with the `--list-cves` option:
 
 ![](./.github/example_list_cves.png)
 
+## CVE Database Auto-Update
+
+The scanner includes an automatic CVE database update check to ensure you always have the latest vulnerability data.
+
+### How It Works
+
+When you run the scanner, it automatically checks if the CVE database is older than 30 days. If outdated, you'll see:
+
+```
+[!] CVE database is outdated (last update: 2025-11-01T13:00:00)
+[*] You can update it by running: python apachetomcatscanner/data/update_db_nvd.py
+[?] Would you like to update now? This may take several minutes. (y/N):
+```
+
+Type `y` to update immediately, or press Enter to skip and continue scanning.
+
+### Disable Auto-Update Check
+
+To skip the update check entirely, use the `--no-auto-update` flag:
+
+```bash
+python ApacheTomcatScanner.py -tt target.com --list-cves --no-auto-update
+```
+
+### Manual Database Update
+
+You can manually update the CVE database anytime:
+
+```bash
+cd apachetomcatscanner/data
+python update_db_nvd.py
+```
+
+**Note:** Updates use the official NVD API with rate limiting (5 requests per 30 seconds). The process may take several minutes but can be interrupted and resumed anytime. Consider getting a free NVD API key for faster updates: https://nvd.nist.gov/developers/request-an-api-key
+
 ## Contributing
 
 Pull requests are welcome. Feel free to open an issue if you want to add other features.

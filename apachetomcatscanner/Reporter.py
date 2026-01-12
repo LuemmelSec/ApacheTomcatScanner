@@ -112,11 +112,35 @@ class Reporter(object):
                     )
                     cve_list = [cve_colored for cve_colored, cve_content in cve_list]
                     if len(cve_list) != 0:
-                        print("  | CVEs: %s" % ", ".join(cve_list))
+                        print("  | CVEs (%d found):" % len(cve_list))
+                        for cve in cve_list:
+                            print("  |   - %s" % cve)
+                    else:
+                        # Check if any versions exist in database for this major.minor branch
+                        normalized_version = self.vulns_db.normalize_version(finding["version"])
+                        major_minor = ".".join(normalized_version.split(".")[:2])
+                        has_similar_versions = any(tag.startswith(major_minor) for tag in self.vulns_db.versions_to_cves.keys())
+                        if has_similar_versions:
+                            newest_year = self.vulns_db.get_newest_cve_year()
+                            year_msg = f" (newest: {newest_year})" if newest_year else ""
+                            print("  | WARNING: Version %s not in database. Database may be outdated%s." % (finding["version"], year_msg))
+                        else:
+                            print("  | No CVE data available for version %s" % finding["version"])
                 elif self.config.show_cves_descriptions_mode:
                     cve_list = self.vulns_db.get_vulnerabilities_of_version_sorted_by_criticity(
                         finding["version"], colors=True, reverse=True
                     )
+                    if len(cve_list) == 0:
+                        # Check if any versions exist in database for this major.minor branch
+                        normalized_version = self.vulns_db.normalize_version(finding["version"])
+                        major_minor = ".".join(normalized_version.split(".")[:2])
+                        has_similar_versions = any(tag.startswith(major_minor) for tag in self.vulns_db.versions_to_cves.keys())
+                        if has_similar_versions:
+                            newest_year = self.vulns_db.get_newest_cve_year()
+                            year_msg = f" (newest: {newest_year})" if newest_year else ""
+                            print("  | WARNING: Version %s not in database. Database may be outdated%s." % (finding["version"], year_msg))
+                        else:
+                            print("  | No CVE data available for version %s" % finding["version"])
                     for cve_colored, cve_content in cve_list:
                         print("  | %s: %s" % (cve_colored, cve_content["description"]))
 
