@@ -169,7 +169,7 @@ def get_cves_from_nvd(year=None):
                         criticity = risk_levels[3]
                     elif 9 <= score_float <= 10:
                         criticity = risk_levels[4]
-                except:
+                except Exception:
                     pass
                 
                 # Extract affected versions from CPE configurations
