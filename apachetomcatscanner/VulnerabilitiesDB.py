@@ -143,8 +143,9 @@ class VulnerabilitiesDB(object):
                 with open(self.metadata_file, 'r') as f:
                     metadata = json.load(f)
                     return metadata.get('last_update', 'Never')
-        except Exception:
-            pass
+        except Exception as e:
+            # Log the error and fall back to reporting no last update date
+            print("[!] Failed to read metadata file %s: %s" % (self.metadata_file, e))
         return 'Never'
     
     def should_update_database(self):
